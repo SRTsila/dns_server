@@ -87,9 +87,9 @@ def parse_dns_answer(binary_data):
 
 
 if __name__ == '__main__':
-    hex = binascii.b2a_hex(form_dns_msg("example.com"))
-    for i in range(0, len(hex), 2):
-        print(bytes([hex[i]]), bytes([hex[i + 1]]), '\n')
-    binary_data, ip_address = send_udp_packet(hex, '77.88.8.8', 53)
-    answer = parse_dns_answer(binary_data)
+    # hex = binascii.b2a_hex(form_dns_msg("loss.ru"))
+    # for i in range(0, len(hex), 2):
+    #     print(bytes([hex[i]]), bytes([hex[i + 1]]), '\n')
+    # binary_data, ip_address = send_udp_packet(hex, '77.88.8.8', 53)
+    answer = parse_dns_answer(b'aaaa81800001000100000000076578616d706c6503636f6d0000010001c00c000100010000398400045db8d822')
     print(answer.ip)
