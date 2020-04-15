@@ -1,6 +1,5 @@
 import socket
 
-
 def take_request():
     sock = socket.socket()
     sock.bind(('', 53))

@@ -4,13 +4,42 @@ from beaker import cache
 import time
 
 
+class AuthoritativeNameServer:
+    def __init__(self, name, _type, _class, ttl, data_length, name_server):
+        self.name = name
+        self._type = _type
+        self._class = _class
+        self.ttl = ttl
+        self.data_length = data_length
+        self.name_server = name_server
+
+
+class DNSPacket:
+    def __init__(self, header, query, answers=None, authority_rrs=None, additional_rrs=None):
+        self.answers = answers
+        self.header = header
+        self.query = query
+        self.authority_rrs = authority_rrs
+        self.additional_rrs = additional_rrs
+
+
+class Answer:
+    def __init__(self, name, _type, _class, ttl, data_length, address):
+        self.name = name
+        self._type = _type
+        self._class = _class
+        self.ttl = ttl
+        self.data_length = data_length
+        self.address = address
+
+
 class Flags:
-    def __init__(self, qr, aa, rd, ra, rcode):
+    def __init__(self, qr, aa, recursion_desired, recursion_available, error_code):
         self.qr = qr
         self.aa = aa
-        self.rd = rd
-        self.ra = ra
-        self.rcode = rcode
+        self.recursion_desired = recursion_desired
+        self.recursion_available = recursion_available
+        self.reply_code = error_code
 
 
 class Header:
@@ -23,7 +52,7 @@ class Header:
         self.ar_count = ar_count
 
 
-class Request:
+class Query:
     def __init__(self, domains, q_type, q_class):
         self.domains = domains
         self.q_type = q_type
@@ -38,7 +67,6 @@ def send_udp_message(message, ip, port):
     data, address = sock.recvfrom(1024)
     sock.close()
     res = data.hex()
-    print(res)
     return res
 
 
@@ -62,12 +90,12 @@ def format_name(domains):
 
 def parse_flags(flags):
     bin_number = bin(int(flags, 16))[2:]
-    qr = bin_number[0]
+    _response = bin_number[0]
     aa = bin_number[5]
-    rd = bin_number[7]
-    ra = bin_number[8]
-    rcode = bin_number[12:]
-    return Flags(qr, aa, rd, ra, rcode)
+    recursion_desired = bin_number[7]
+    recursion_available = bin_number[8]
+    reply_code = bin_number[12:]
+    return Flags(_response, aa, recursion_desired, recursion_available, reply_code)
 
 
 def take_standart_mark(domain_len, answer, start_pos):
@@ -89,6 +117,7 @@ def input_rd_data(_bytes, rd_len):
 
 
 def find_domain_names(answer, start_pos, domains, counter, domain, stop):
+    t = answer[start_pos:start_pos + 2]
     domain_len = int(answer[start_pos:start_pos + 2], 16)
     if 64 > domain_len > 0:
         domain.append(take_standart_mark(domain_len, answer, start_pos))
@@ -102,6 +131,7 @@ def find_domain_names(answer, start_pos, domains, counter, domain, stop):
     elif domain_len >= 64:
         pos = int(answer[start_pos:start_pos + 4], 16) - 49152
         while pos < start_pos - 2:
+            c = answer[pos:pos + 2]
             domain_len = int(answer[pos:pos + 2], 16)
             domain.append(take_standart_mark(domain_len, answer, pos))
             pos += domain_len * 2 + 2
@@ -115,45 +145,74 @@ def find_domain_names(answer, start_pos, domains, counter, domain, stop):
 
 
 def answer_parser(answer):
-    global start_pos
     id = answer[:4]
     flags_data = answer[4:8]
     flags = parse_flags(flags_data)
-    re_count = int(answer[8:12], 16)  # число запросов
-    an_count = int(answer[12:16], 16)
-    ns_count = int(answer[16:20], 16)
-    ar_count = int(answer[20:24], 16)
-    header = Header(id, flags, re_count, an_count, ns_count, ar_count)
+    questions = int(answer[8:12], 16)  # число запросов
+    answer_rrs = int(answer[12:16], 16)
+    authority_rrs = int(answer[16:20], 16)
+    additional_rrs = int(answer[20:24], 16)
+    header = Header(id, flags, questions, answer_rrs, authority_rrs, additional_rrs)
     start_pos = 24
     domains = []
-    i = re_count
+    i = questions
     domain = []
     while i > 0:
         start_pos, domains, i, domain, _ = find_domain_names(answer, start_pos, domains, i, domain, True)
     name = format_name(domains)
     q_type = int(answer[start_pos + 2:start_pos + 6], 16)
     q_class = int(answer[start_pos + 6:start_pos + 10], 16)
-    request = Request(name, q_type, q_class)
-    pos = (int(answer[start_pos + 10:start_pos + 14], 16) - 49152) * 2
+    quiry = Query(name, q_type, q_class)
     stop = False
     domains = []
-    while not stop:
-        pos, domains, i, domain, stop = find_domain_names(answer, pos, domains, 1, domain, stop)
-    name = format_name(domains)
-    t = answer[start_pos + 14:start_pos + 18]
-    _type = int(answer[start_pos + 14:start_pos + 18], 16)
-    _class = int(answer[start_pos + 18:start_pos + 22], 16)
-    ttl = int(answer[start_pos + 26:start_pos + 30], 16)
-    rd_length = int(answer[start_pos + 30:start_pos + 34], 16)
-    rd_data = input_rd_data(answer[start_pos + 34:start_pos + 34 + rd_length * 2], rd_length)
-    print(rd_data)
+    j = answer_rrs
+    start_pos += 14
+    answers = []
+    while j > 0:
+        pos = (int(answer[start_pos - 4:start_pos], 16) - 49152) * 2
+        while not stop:
+            pos, domains, i, domain, stop = find_domain_names(answer, pos, domains, 1, domain, stop)
+        name = format_name(domains)
+        _type = int(answer[start_pos:start_pos + 4], 16)
+        _class = int(answer[start_pos + 4:start_pos + 8], 16)
+        ttl = int(answer[start_pos + 12:start_pos + 16], 16)
+        rd_length = int(answer[start_pos + 16:start_pos + 20], 16)
+        rd_data = input_rd_data(answer[start_pos + 20:start_pos + 20 + rd_length * 2], rd_length)
+        answers.append(Answer(name, _type, _class, ttl, rd_length, rd_data))
+        start_pos += 24 + rd_length * 2
+        j -= 1
+    x = DNSPacket(header, quiry, answers)
+    j = authority_rrs
+    stop = False
+    author_servers = []
+    domains = []
+    d = []
+    while j > 0:
+        pos = (int(answer[start_pos - 4:start_pos], 16) - 49152) * 2
+        while not stop:
+            pos, domains, i, domain, stop = find_domain_names(answer, pos, domains, 1, domain, stop)
+        name = format_name(domains)
+        _type = int(answer[start_pos:start_pos + 4], 16)
+        _class = int(answer[start_pos + 4:start_pos + 8], 16)
+        ttl = int(answer[start_pos + 12:start_pos + 16], 16)
+        data_length = int(answer[start_pos + 16:start_pos + 20], 16)
+        cur_pos = start_pos + 20
+        while cur_pos < start_pos + 21 + data_length*2:
+            cur_pos, d, _, domain, __ = find_domain_names(answer, cur_pos, d, 1, domain, False)
+            t = answer[cur_pos-1:cur_pos+1]
+        r = [domain]
+        server_name = format_name(r)
+        print(server_name)
+        author_servers.append(AuthoritativeNameServer(name, _type, _class, ttl, data_length, server_name))
+        j -= 1
 
 
 message = "aa bb 01 00 00 01 00 00 00 00 00 00 " \
           "07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01"
 
-response = "aabb81800002000100000000076578616d706c6503636f6d00c0180000010001c00c00010001000006e600045db8d822"
+# response = "aabb81800002000100000000076578616d706c6503636f6d00c0180000010001c00c00010001000006e600045db8d822"
+# response = "00 02 81 80 00 01 00 02 00 00 00 00 09 77 69 6b 69 70 65 64 69 61 02 72 75 00 00 01 00 01 c0 0c 00 01 00 01 00 00 0c ce 00 04 5b c3 f0 7e c0 0c 00 01 00 01 00 00 0c ce 00 04 5b c3 f0 87"
 # response = send_udp_message(message, "8.8.8.8", 53)
-print(format_hex(response))
-answer_parser(response)
-c = cache.Cache(expire=10, starttime=time.time())
+# print(format_hex(response.replace(" ", "")))
+response = "0002850000010001000200020265310272750000010001c00c000100010000012c0004c313dc0cc00c000200010000012c000b026e7305687364726ec00fc00c000200010000012c000a036e7331036e6773c00fc033000100010000003c0004c31347fdc04a0001000100000e100004c3e2de41"
+answer_parser(response.replace(" ", ''))
