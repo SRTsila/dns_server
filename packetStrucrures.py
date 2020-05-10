@@ -1,11 +1,18 @@
 class AuthoritativeNameServer:
-    def __init__(self, name, _type, _class, ttl, data_length, name_server):
+    def __init__(self, name, _type, _class, ttl, data_length, name_server, mailbox, serial_number, refresh_interval,
+                 retry_interval, expire_interval, minimum_ttl):
         self.name = name
         self._type = _type
         self._class = _class
         self.ttl = ttl
         self.data_length = data_length
         self.name_server = name_server
+        self.mailbox = mailbox
+        self.serial_number = serial_number
+        self.refresh_interval = refresh_interval
+        self.retry_interval = retry_interval
+        self.expire_interval = expire_interval
+        self.minimum_ttl = ttl
 
 
 class DNSPacket:
