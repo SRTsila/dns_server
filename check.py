@@ -1,18 +1,19 @@
 import socket
 import binascii
 from packetStrucrures import *
-from main import cache
+
+cache = {}
 
 
-def send_udp_message(message, ip, port):
-    message = message.replace(" ", "").replace("\n", "")
-    server_address = (ip, port)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(binascii.unhexlify(message), server_address)
-    data, address = sock.recvfrom(1024)
-    sock.close()
-    res = data.hex()
-    return res
+# def send_udp_message(message, ip, port):
+#     message = message.replace(" ", "").replace("\n", "")
+#     server_address = (ip, port)
+#     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#     sock.sendto(binascii.unhexlify(message), server_address)
+#     data, address = sock.recvfrom(1024)
+#     sock.close()
+#     res = data.hex()
+#     return res
 
 
 def format_hex(hex):
@@ -74,12 +75,19 @@ def find_domain_names(answer, start_pos, domains, counter, domain, stop):
             stop = True
         start_pos = start_pos + 2 + domain_len * 2
     elif domain_len >= 64:
-        pos = int(answer[start_pos:start_pos + 4], 16) - 49152
+        t = answer[start_pos:start_pos + 4]
+        pos = (int(answer[start_pos:start_pos + 4], 16) - 49152) * 2
         previous_name_len = int(answer[pos * 2:pos * 2 + 2], 16)
+        c = ""
         while pos < start_pos - 2:
             c = answer[pos:pos + 2]
             domain_len = int(answer[pos:pos + 2], 16)
-            domain.append(take_standart_mark(domain_len, answer, pos))
+            a = take_standart_mark(domain_len, answer, pos)
+            if a != "":
+                domain.append(a)
+            else:
+                stop = True
+                break
             pos += domain_len * 2 + 2
         counter -= 1
         domains.append(domain)
@@ -90,7 +98,15 @@ def find_domain_names(answer, start_pos, domains, counter, domain, stop):
     return start_pos, domains, counter, domain, stop
 
 
-def answer_parser(answer):
+def get_name(answer, start_pos, domains=[]):
+    domain = []
+    stop = False
+    while not stop:
+        start_pos, domains, i, domain, stop = find_domain_names(answer, start_pos, domains, 1, domain, stop)
+    return format_name(domains)
+
+
+def parse_answer(answer):
     id = answer[:4]
     # flags_data = answer[4:8]
     # flags = parse_flags(flags_data)
@@ -121,82 +137,88 @@ def answer_parser(answer):
         pos = (int(answer[start_pos - 4:start_pos], 16) - 49152) * 2
         while not stop:
             pos, domains, i, domain, stop = find_domain_names(answer, pos, domains, 1, domain, stop)
-        name = format_name(domains)
+        name = format_name(domains)[0]
         _type = int(answer[start_pos:start_pos + 4], 16)
         # _class = int(answer[start_pos + 4:start_pos + 8], 16)
         ttl = int(answer[start_pos + 12:start_pos + 16], 16)
-        rd_length = int(answer[start_pos + 16:start_pos + 20], 16)
+        rd_length = int(answer[start_pos + 16:start_pos + 20], 16) * 2
         # rd_data = input_rd_data(answer[start_pos + 20:start_pos + 20 + rd_length * 2], rd_length)
-        data = answer[s_p:start_pos + 20 + rd_length]
+        data = answer[start_pos + 16:start_pos + 20 + rd_length]
         answ = Answer(name, _type, ttl, data)
         if cache.get((name, _type), None) is None:
             cache[(name, _type)] = [answ]
         else:
             cache[(name, _type)].append(answ)
-        answers.append(Answer(name, _type, ttl, data))
-        start_pos += 24 + rd_length * 2
+        answers.append(NewStrc(_type, ttl, data))
+        start_pos += 24 + rd_length
         j -= 1
     j = authority_rrs
     stop = False
     author_servers = []
     domains = []
     while j > 0:
-        s_p = start_pos - 4
-        print(answer[start_pos - 4:start_pos])
+        # print(answer[start_pos - 4:start_pos])
         pos = (int(answer[start_pos - 4:start_pos], 16) - 49152) * 2
-        print(pos)
+        # print(pos)
         while not stop:
             pos, domains, i, domain, stop = find_domain_names(answer, pos, domains, 1, domain, stop)
-        name = format_name(domains)
+
+        name = format_name(domains)[0]
+        # print(name)
+        # print(answer[start_pos:start_pos + 4])
         _type = int(answer[start_pos:start_pos + 4], 16)
         # _class = int(answer[start_pos + 4:start_pos + 8], 16)
         ttl = int(answer[start_pos + 12:start_pos + 16], 16)
-        # data_length = int(answer[start_pos + 16:start_pos + 20], 16)
-        cur_pos = start_pos + 20
-        result, cur_pos = find_mailbox_or_name_server(answer, cur_pos)
-        server_name = format_name([result[0]])
-        mailbox, cur_pos = find_mailbox_or_name_server(answer, cur_pos)
+        data_length = int(answer[start_pos + 16:start_pos + 20], 16) * 2
+        # cur_pos = start_pos + 20
+        # result, cur_pos = find_mailbox_or_name_server(answer, cur_pos)
+        # server_name = format_name([result[0]])
+        # mailbox, cur_pos = find_mailbox_or_name_server(answer, cur_pos)
         # mailbox = format_name([mailbox[0]])
         # serial_number = int(answer[cur_pos:cur_pos + 8], 16)
         # refresh_interval = int(answer[cur_pos + 8:cur_pos + 16], 16)
         # retry_interval = int(answer[cur_pos + 16:cur_pos + 24], 16)
         # expire_limit = int(answer[cur_pos + 24:cur_pos + 32], 16)
         # minimum_ttl = int(answer[cur_pos + 32:cur_pos + 40], 16)
-        data = answer[s_p:cur_pos + 40]
+        data = answer[start_pos + 16:start_pos + 20 + data_length]
         # print(data)
-        ans = AuthoritativeNameServer(name, _type, ttl, data, server_name)
+        ans = NewStrc(_type, ttl, data)
+        # print((name, _type))
         if cache.get((name, _type), None) is None:
             cache[(name, _type)] = [ans]
         else:
             cache[(name, _type)].append(ans)
-        # author_servers.append(
-        #     AuthoritativeNameServer(name, _type, ttl, data, server_name))
         j -= 1
-        start_pos = cur_pos + 44
+
+        start_pos += 24 + data_length
+        t = answer[start_pos:start_pos + 4]
     j = additional_rrs
     additional_records = []
     while j > 0:
-        s_p = start_pos - 4
-        result, start_pos = find_mailbox_or_name_server(answer, start_pos)
-        name = format_name([result[0]])
+        t = answer[start_pos - 4:start_pos]
+        result, start_pos = find_mailbox_or_name_server(answer, start_pos - 4)
+        name = format_name([result[0]])[0]
         _type = int(answer[start_pos:start_pos + 4], 16)
         ttl = int(answer[start_pos + 8:start_pos + 16], 16)
-        data_length = int(answer[start_pos + 16:start_pos + 20], 16)
-        data = answer[s_p:start_pos + 20 + data_length]
-        ar = AdditionalRecords(name, _type, ttl, data)
+        data_length = int(answer[start_pos + 16:start_pos + 20], 16) * 2
+        data = answer[start_pos + 16:start_pos + 20 + data_length]
+        ar = NewStrc(_type, ttl, data)
         if cache.get((name, _type), None) is None:
             cache[(name, _type)] = [ar]
         else:
             cache[(name, _type)].append(ar)
         # additional_records.append(AdditionalRecords(name, _type, ttl, data))
         start_pos += 24 + data_length
+        j -= 1
     # cache_info = CacheInfo(answers, author_servers, additional_records)
+    print(1)
 
 
 def find_mailbox_or_name_server(answer, start_pos):
     result = []
     domain = []
     domains = []
+    stop = False
     while True:
         t = answer[start_pos:start_pos + 2]
         domain_len = int(answer[start_pos:start_pos + 2], 16)
@@ -209,9 +231,10 @@ def find_mailbox_or_name_server(answer, start_pos):
                 start_pos += 2
                 break
         elif domain_len >= 64:
+            t = answer[start_pos:start_pos + 4]
             pos = (int(answer[start_pos:start_pos + 4], 16) - 49152) * 2
-            while answer[pos:pos + 2] != "00":
-                pos, domains, _, domain, __ = find_domain_names(answer, pos, domains, 1, domain, False)
+            while answer[pos:pos + 2] != "00" and not stop:
+                pos, domains, _, domain, stop = find_domain_names(answer, pos, domains, 1, domain, stop)
             for d in domains:
                 result.append(d)
             start_pos += 4
@@ -223,27 +246,3 @@ def parse_response(response):
     header = response[0:24]
     question = response[24:]
     transaction_id = int(header[0:4], 16)
-
-
-message = "aa bb 01 00 00 01 00 00 00 00 00 00 " \
-          "07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01"
-
-# response = "aabb81800002000100000000076578616d706c6503636f6d00c0180000010001c00c00010001000006e600045db8d822"
-# response = "00 02 81 80 00 01 00 02 00 00 00 00 09 77 69 6b 69 70 65 64 69 61 02 72 75 00 00 01 00 01 c0 0c 00 01 00 01 00 00 0c ce 00 04 5b c3 f0 7e c0 0c 00 01 00 01 00 00 0c ce 00 04 5b c3 f0 87"
-# response = send_udp_message(message, "8.8.8.8", 53)
-# print(format_hex(response.replace(" ", "")))
-response = "00 01 85 83 00 01" \
-           " 00 00 00 01 00 00 01 31 01 30 03 31 36 38 03 31" \
-           " 39 32 07 69 6e 2d 61 64 64 72 04 61 72 70 61 00" \
-           " 00 0c 00 01 c0 10 00 06 00 01 00 00 2a 30 00 2f " \
-           "09 6c 6f 63 61 6c 68 6f 73 74 00 06 6e 6f 62 6f " \
-           "64 79 07 69 6e 76 61 6c 69 64 00 00 00 00 01 00 " \
-           "00 0e 10 00 00 04 b0 00 09 3a 80 00 00 2a 30"
-# response = "000381800001000000010000047572667502727500001c0001c00c00060001000006070027036e7331c00c0a686f73746d6173746572c00c77ee182a00000e10000007080024ea0000000e10"
-response = "000381800001000000010000047573756502727500001c0001c00c0006000100000577001f026e73c00c036e6f63c00c77ee6b2b0000a8c000000e100012750000002a30"
-answer_parser(response.replace(" ", ''))
-# 6 12
-# 22 44
-# 38 76
-# 54 108
-# 70 140

@@ -1,4 +1,5 @@
 from time import time
+from zz.utils import decimal_to_hex
 
 
 class AuthoritativeNameServer:
@@ -81,6 +82,21 @@ class CacheInfo:
         for record in self.additional_records:
             if record.ttl < round(time()):
                 self.additional_records.remove(record)
+
+
+class NewStrc:
+    def __init__(self, _type, ttl, data):
+        self.name = "c00c"
+        self._type = _type
+        self.ttl = ttl
+        self.data = data
+        self._class = "0001"
+
+    def __str__(self):
+        self.name + self._type + self._class + decimal_to_hex(self.ttl - time()).rjust(8, '0') + self.data
+
+    def can_live(self):
+        return self.ttl > time()
 
 
 # class Flags:
