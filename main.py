@@ -87,7 +87,6 @@ if __name__ == '__main__':
     while True:
         received, address = udp_socket.recvfrom(1024)
         request = binascii.hexlify(received).decode("utf-8")
-        print(request)
 
         request = parse_request(request)
         if request is not None:

@@ -144,7 +144,6 @@ def parse_answer(answer):
             cache[(name, _type)].append(ar)
         start_pos += 24 + data_length
         j -= 1
-    print(1)
 
 
 def find_mailbox_or_name_server(answer, start_pos):
