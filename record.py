@@ -2,7 +2,7 @@ from time import time
 
 
 class Record:
-    def __init__(self, _type, ttl, data):
+    def __init__(self, _type: str, ttl: int, data: str):
         self.name = "c00c"
         self._type = _type
         self.ttl = ttl + round(time())
