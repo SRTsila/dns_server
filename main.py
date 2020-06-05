@@ -19,7 +19,7 @@ def get_data_from_cache(key):
 
 
 def check_cache(before_close=False):
-    if round(time()) - cache_check_time > 1 or before_close:
+    if round(time()) - cache_check_time > 60 or before_close:
         for name, _type in cache.keys():
             for item in cache.get((name, _type)):
                 if not item.can_live():
