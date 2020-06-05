@@ -15,7 +15,7 @@ def get_data_from_cache(key):
         if element.can_live():
             result.append(element.__str__())
             count += 1
-    return ".".join(result), count
+    return "".join(result), count
 
 
 def check_cache(before_close=False):
@@ -83,7 +83,7 @@ if __name__ == '__main__':
         cache.cache = {}
     check_cache(True)
     udp_socket = socket(AF_INET, SOCK_DGRAM)
-    udp_socket.bind(('127.0.0.1', 53))
+    udp_socket.bind(('127.228.228.228', 53))
 
     while True:
         received, address = udp_socket.recvfrom(1024)
